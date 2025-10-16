@@ -10,17 +10,48 @@ const ether = tokens
 describe('DAO', () => {
     let token, dao;
     let deployer,
-        funder;
+        funder,
+        investor1,
+        investor2,
+        investor3,
+        investor4,
+        investor5,
+        recipient,
+        user;
 
     beforeEach(async () => {
         // Setup accounts
         let accounts = await ethers.getSigners();
-        deployer = accounts[0]
-        funder = accounts[1]
+        deployer = accounts[0];
+        funder = accounts[1];
+        investor1 = accounts[2];
+        investor2 = accounts[3];
+        investor3 = accounts[4];
+        investor4 = accounts[5];
+        investor5 = accounts[6];
+        recipient = accounts[7];
+        user = accounts[8]; // non-dao member
 
         // Deploy Token
         const Token = await ethers.getContractFactory('Token');
         token = await Token.deploy('Dapp University', 'DAPP', '1000000');
+
+        // Sends tokens to investors - each one gets 20%
+        transaction = await token.connect(deployer).transfer(investor1.address, tokens(200000));
+        await transaction.wait();
+
+        transaction = await token.connect(deployer).transfer(investor2.address, tokens(200000));
+        await transaction.wait();
+
+        transaction = await token.connect(deployer).transfer(investor3.address, tokens(200000));
+        await transaction.wait();
+
+        transaction = await token.connect(deployer).transfer(investor4.address, tokens(200000));
+        await transaction.wait();
+
+        transaction = await token.connect(deployer).transfer(investor5.address, tokens(200000));
+        await transaction.wait();
+
 
         // Deploy DAO
         const DAO = await ethers.getContractFactory('DAO');
@@ -43,6 +74,69 @@ describe('DAO', () => {
 
         it('returns quorum', async () => {
             expect(await dao.quorum()).to.equal('500000000000000000000001')
+        });
+
+        it('checks token transfers', async () => {
+            expect(await token.balanceOf(investor1.address)).to.be.equal(tokens(200000));
+
+            expect(await token.balanceOf(investor2.address)).to.be.equal(tokens(200000));
+
+            expect(await token.balanceOf(investor3.address)).to.be.equal(tokens(200000));
+
+            expect(await token.balanceOf(investor4.address)).to.be.equal(tokens(200000));
+
+            expect(await token.balanceOf(investor5.address)).to.be.equal(tokens(200000));
+
+            expect(await token.balanceOf(deployer.address)).to.be.equal(tokens(0));
+        });
+
+    });
+
+    describe('Proposal creation', () => {
+        let transaction, result;
+
+        describe('Success', () => {
+
+            beforeEach(async () => {
+                transaction = await dao.connect(investor1).createProposal('Proposal 1', ether(100), recipient.address);
+                result = await transaction.wait()
+            });
+
+            it('updates proposal count', async () => {
+                expect(await dao.proposalCount()).to.equal(1);
+            });
+
+            it('updates proposal mapping', async () => {
+                const proposal = await dao.proposals(1);
+                expect(proposal.id).to.equal(1);
+                expect(proposal.amount).to.equal(ether(100));
+                expect(proposal.recipient).to.equal(recipient.address);
+                expect(proposal.votes).to.equal(0);
+                expect(proposal.finalized).to.be.false;
+
+            });
+
+            it('emits a propose event', async () => {
+                await expect(transaction).to.emit(dao, 'Propose').withArgs(1, ether(100), recipient.address, investor1.address);
+            });
+
+        });
+
+        describe('Failure', () => {
+            it('rejects invalid amount', async () => {
+                await expect(dao.connect(investor1).createProposal('Proposal1', ether(1000), recipient.address)).to.be.reverted;
+
+            });
+
+            it('rejects non-investor', async () => {
+                await expect(dao.connect(user).createProposal('Proposal1', ether(100), recipient.address)).to.be.reverted;
+
+            });
+
+            it('', async () => {
+
+            });
+
         });
 
     });
