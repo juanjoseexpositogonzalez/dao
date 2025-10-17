@@ -19,7 +19,9 @@ contract DAO {
     }
 
     uint256 public proposalCount;
+    
     mapping(uint256 => Proposal) public proposals;
+    mapping(address => mapping(uint256 => bool)) votes;
 
     event Propose(
         uint256 id,
@@ -28,9 +30,17 @@ contract DAO {
         address creator
     );
 
+    event Vote(
+        uint256 id,
+        address investor
+    );
+
+    event Finalize(uint256 id);
+
+
     modifier onlyInvestor() {
         require(
-            Token(token).balanceOf(msg.sender) > 0,
+            token.balanceOf(msg.sender) > 0,
             "must be token holder"
         );
         _;
@@ -71,6 +81,50 @@ contract DAO {
             _recipient,
             msg.sender
         );
+    }
+
+    // Vote on proposal
+    function vote(uint256 _id) external onlyInvestor {
+        // Fetch proposal from mapping by id
+        Proposal storage proposal = proposals[_id];
+
+        // Don't let investors vote twice
+        require(!votes[msg.sender][_id], "already voted");
+
+        // update votes
+        proposal.votes += token.balanceOf(msg.sender);
+
+        // Track that user has voted
+        votes[msg.sender][_id] = true;
+
+        // Emit an event 
+        emit Vote(_id, msg.sender); 
+    }
+
+    // Finalize proposals and transfer funds
+    function finalizeProposal(uint256 _id) external onlyInvestor {
+
+        // Fetch the proposal from mapping id
+        Proposal storage proposal = proposals[_id];
+
+        // Ensure proposal is not already finalized
+        require(proposal.finalized == false, "proposal already finalized");
+
+        // Mark proposal as finalize
+        proposal.finalized = true;
+
+        // Check that proposal has enought votes
+        require(proposal.votes >= quorum, "must reach quorum to finalize proposal");
+
+        // Check that the contract has enough ether
+        require(address(this).balance >= proposal.amount);
+
+        // Transfer funds to recipient
+        (bool sent, ) = proposal.recipient.call{ value: proposal.amount }("");
+        require(sent);
+
+        // Emit event
+        emit Finalize(_id);
     }
     
 }
